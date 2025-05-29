@@ -6,12 +6,27 @@
 #include <iostream>
 #include <iomanip>
 
+/**
+ * @brief Constructor for the cache simulator
+ * 
+ * @param _sets Number of sets in the cache
+ * @param _ways Number of ways (associativity) in the cache
+ * @param _linesz Size of each cache line in bytes
+ * @param _name Name identifier for this cache instance
+ * @return None
+ */
 cache_sim_t::cache_sim_t(size_t _sets, size_t _ways, size_t _linesz, const char* _name)
 : sets(_sets), ways(_ways), linesz(_linesz), name(_name), log(false)
 {
   init();
 }
 
+/**
+ * @brief Displays help information about cache configuration requirements and exits the program
+ * 
+ * @param None
+ * @return None (terminates execution with exit code 1)
+ */
 static void help()
 {
   std::cerr << "Cache configurations must be of the form" << std::endl;
@@ -21,6 +36,13 @@ static void help()
   exit(1);
 }
 
+/**
+ * @brief Factory method that constructs an appropriate cache simulator based on configuration
+ * 
+ * @param config String specifying cache configuration in format "sets:ways:blocksize"
+ * @param name Name identifier for the cache instance
+ * @return Pointer to a newly constructed cache_sim_t or fa_cache_sim_t object
+ */
 cache_sim_t* cache_sim_t::construct(const char* config, const char* name)
 {
   const char* wp = strchr(config, ':');
@@ -37,6 +59,12 @@ cache_sim_t* cache_sim_t::construct(const char* config, const char* name)
   return new cache_sim_t(sets, ways, linesz, name);
 }
 
+/**
+ * @brief Initializes the cache simulator by validating parameters and allocating resources
+ * 
+ * @param None
+ * @return None
+ */
 void cache_sim_t::init()
 {
   if (sets == 0 || (sets & (sets-1)))
@@ -60,6 +88,12 @@ void cache_sim_t::init()
   miss_handler = NULL;
 }
 
+/**
+ * @brief Copy constructor for the cache simulator
+ * 
+ * @param rhs Reference to the cache_sim_t object to copy from
+ * @return None
+ */
 cache_sim_t::cache_sim_t(const cache_sim_t& rhs)
  : sets(rhs.sets), ways(rhs.ways), linesz(rhs.linesz),
    idx_shift(rhs.idx_shift), name(rhs.name), log(false)
@@ -68,12 +102,24 @@ cache_sim_t::cache_sim_t(const cache_sim_t& rhs)
   memcpy(tags, rhs.tags, sets*ways*sizeof(uint64_t));
 }
 
+/**
+ * @brief Destructor for the cache simulator - prints statistics and frees allocated memory
+ * 
+ * @param None
+ * @return None
+ */
 cache_sim_t::~cache_sim_t()
 {
   print_stats();
   delete [] tags;
 }
 
+/**
+ * @brief Prints cache performance statistics to standard output
+ * 
+ * @param None
+ * @return None
+ */
 void cache_sim_t::print_stats()
 {
   float mr = 100.0f*(read_misses+write_misses)/(read_accesses+write_accesses);
@@ -97,6 +143,12 @@ void cache_sim_t::print_stats()
   std::cout << "Miss Rate:             " << mr << '%' << std::endl;
 }
 
+/**
+ * @brief Checks if the specified address is in the cache
+ * 
+ * @param addr Memory address to check
+ * @return Pointer to the matching tag entry if found, NULL otherwise
+ */
 uint64_t* cache_sim_t::check_tag(uint64_t addr)
 {
   size_t idx = (addr >> idx_shift) & (sets-1);
@@ -109,6 +161,12 @@ uint64_t* cache_sim_t::check_tag(uint64_t addr)
   return NULL;
 }
 
+/**
+ * @brief Selects a cache line to evict and replaces it with the new address
+ * 
+ * @param addr Memory address to be placed in the cache
+ * @return The tag value of the evicted cache line
+ */
 uint64_t cache_sim_t::victimize(uint64_t addr)
 {
   size_t idx = (addr >> idx_shift) & (sets-1);
@@ -118,6 +176,14 @@ uint64_t cache_sim_t::victimize(uint64_t addr)
   return victim;
 }
 
+/**
+ * @brief Simulates a memory access (read or write) to the cache
+ * 
+ * @param addr Memory address to access
+ * @param bytes Number of bytes being accessed
+ * @param store True for a write operation, false for a read operation
+ * @return None
+ */
 void cache_sim_t::access(uint64_t addr, size_t bytes, bool store)
 {
   store ? write_accesses++ : read_accesses++;
@@ -156,6 +222,15 @@ void cache_sim_t::access(uint64_t addr, size_t bytes, bool store)
     *check_tag(addr) |= DIRTY;
 }
 
+/**
+ * @brief Cleans and/or invalidates cache lines in the specified address range
+ * 
+ * @param addr Starting memory address
+ * @param bytes Size of the memory region in bytes
+ * @param clean If true, writes back dirty cache lines
+ * @param inval If true, invalidates cache lines
+ * @return None
+ */
 void cache_sim_t::clean_invalidate(uint64_t addr, size_t bytes, bool clean, bool inval)
 {
   uint64_t start_addr = addr & ~(linesz-1);
@@ -181,17 +256,37 @@ void cache_sim_t::clean_invalidate(uint64_t addr, size_t bytes, bool clean, bool
     miss_handler->clean_invalidate(addr, bytes, clean, inval);
 }
 
+/**
+ * @brief Constructor for the fully associative cache simulator
+ * 
+ * @param ways Number of ways (associativity) in the cache
+ * @param linesz Size of each cache line in bytes
+ * @param name Name identifier for this cache instance
+ * @return None
+ */
 fa_cache_sim_t::fa_cache_sim_t(size_t ways, size_t linesz, const char* name)
   : cache_sim_t(1, ways, linesz, name)
 {
 }
 
+/**
+ * @brief Checks if the specified address is in the fully associative cache
+ * 
+ * @param addr Memory address to check
+ * @return Pointer to the matching tag entry if found, NULL otherwise
+ */
 uint64_t* fa_cache_sim_t::check_tag(uint64_t addr)
 {
   auto it = tags.find(addr >> idx_shift);
   return it == tags.end() ? NULL : &it->second;
 }
 
+/**
+ * @brief Selects a cache line to evict and replaces it with the new address in a fully associative cache
+ * 
+ * @param addr Memory address to be placed in the cache
+ * @return The tag value of the evicted cache line
+ */
 uint64_t fa_cache_sim_t::victimize(uint64_t addr)
 {
   uint64_t old_tag = 0;
